@@ -9,6 +9,7 @@ services:
   - type: web
     name: kinochi-ota-bot
     runtime: python
+    pythonVersion: 3.12
     region: frankfurt  # Yevropa - Telegram uchun tezroq
     plan: free
     buildCommand: pip install -r requirements.txt
