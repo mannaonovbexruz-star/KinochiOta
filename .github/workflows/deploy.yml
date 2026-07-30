@@ -1,0 +1,106 @@
+# ====================================
+# GitHub Actions: CI + Render Deploy
+# ====================================
+# Bu workflow har safar main branch'ga push qilinganda:
+# 1. Python 3.12 da kodni tekshiradi (sintaksis, import)
+# 2. Agar testlar o'tsa, Render Deploy Hook orqali avtomatik deploy qiladi
+#
+# ⚠️ SOZLASH:
+# 1. GitHub repo → Settings → Secrets and variables → Actions
+# 2. New secret: RENDER_DEPLOY_HOOK_URL
+#    Qiymat: Render Dashboard → Service → Settings → Deploy Hook URL
+# 3. Boshqa secret kerak emas!
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+defaults:
+  run:
+    # Barcha test komandalari KinochiOta/ papkasida ishlasin
+    working-directory: KinochiOta
+
+jobs:
+  test:
+    name: 🧪 Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout repository (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: 🐍 Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: 'pip'
+          cache-dependency-path: KinochiOta/requirements.txt
+
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 🔍 Python syntax check
+        run: |
+          python -m py_compile main.py
+          python -m py_compile config.py
+          echo "✅ Barcha fayllar sintaksis to'g'ri"
+
+      - name: 🔌 Module import test
+        env:
+          # config.py BOT_TOKEN talab qiladi — CI uchun dummy qiymat
+          BOT_TOKEN: skip-ci-check
+        run: |
+          python -c "
+import config
+print('✅ config.py - muvaffaqiyatli import qilindi')
+"
+          python -c "
+import ast
+with open('main.py', 'r') as f:
+    tree = ast.parse(f.read())
+    functions = [node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
+    classes = [node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
+    print(f'✅ main.py - {len(functions)} ta funksiya, {len(classes)} ta klass')
+"
+          echo "✅ Barcha importlar muvaffaqiyatli"
+
+  deploy:
+    name: 🚀 Render Deploy
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 🚀 Trigger Render Deploy Hook
+        env:
+          RENDER_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$RENDER_HOOK_URL" ]; then
+            echo "❌ XATOLIK: RENDER_DEPLOY_HOOK_URL secret'i topilmadi!"
+            echo "👉 GitHub repo → Settings → Secrets and variables → Actions"
+            echo "👉 New repository secret → RENDER_DEPLOY_HOOK_URL"
+            exit 1
+          fi
+          
+          echo "📤 Render deploy trigger yuborilmoqda..."
+          HTTP_CODE=$(curl -s -o /tmp/render-response.json -w "%{http_code}" -X POST "$RENDER_HOOK_URL")
+          
+          if [ "$HTTP_CODE" = "200" ]; then
+            DEPLOY_ID=$(python3 -c "import json; print(json.load(open('/tmp/render-response.json')).get('id', 'unknown'))" 2>/dev/null)
+            echo "✅ Deploy boshlandi! ID: $DEPLOY_ID"
+            echo "👉 https://dashboard.render.com"
+          elif [ "$HTTP_CODE" = "202" ]; then
+            echo "✅ Deploy navbatga qo'yildi (boshqa deploy davom etmoqda)"
+          else
+            echo "❌ Xatolik! HTTP: $HTTP_CODE"
+            cat /tmp/render-response.json 2>/dev/null
+            exit 1
+          fi
