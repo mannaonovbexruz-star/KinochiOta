@@ -181,43 +181,43 @@ async def watchdog_check():
                 railway_up = False
                 logger.debug(f"Watchdog: Railway check failed: {e}")
 
-        # Webhook hozir shu serverda faolmi?
-        is_self_active = await _is_self_webhook_active()
+            # Webhook hozir shu serverda faolmi?
+            is_self_active = await _is_self_webhook_active()
 
-        if railway_up:
-            _watchdog_fail_count = 0
+            if railway_up:
+                _watchdog_fail_count = 0
 
-            if is_self_active:
-                # Railway qaytdi, backup-ni o'chirish kerak
-                logger.info("✅ Watchdog: Railway qaytdi! Backup o'chirilmoqda...")
-                try:
-                    await delete_webhook()
-                    logger.info("✅ Watchdog: Webhook o'chirildi, Railway polling-ga qaytdi")
-                except Exception as e:
-                    logger.error(f"❌ Watchdog: Webhook o'chirishda xatolik: {e}")
-        else:
-            _watchdog_fail_count += 1
+                if is_self_active:
+                    # Railway qaytdi, backup-ni o'chirish kerak
+                    logger.info("✅ Watchdog: Railway qaytdi! Backup o'chirilmoqda...")
+                    try:
+                        await delete_webhook()
+                        logger.info("✅ Watchdog: Webhook o'chirildi, Railway polling-ga qaytdi")
+                    except Exception as e:
+                        logger.error(f"❌ Watchdog: Webhook o'chirishda xatolik: {e}")
+            else:
+                _watchdog_fail_count += 1
 
-            if _watchdog_fail_count == WATCHDOG_FAILURES:
-                logger.warning(f"⚠️ Watchdog: Railway ({_watchdog_fail_count}/{WATCHDOG_FAILURES}) javob bermadi")
+                if _watchdog_fail_count == WATCHDOG_FAILURES:
+                    logger.warning(f"⚠️ Watchdog: Railway ({_watchdog_fail_count}/{WATCHDOG_FAILURES}) javob bermadi")
 
-            # Threshold ga yetdimi va webhook hali bu serverda emasmi?
-            if (
-                _watchdog_fail_count >= WATCHDOG_FAILURES
-                and not is_self_active
-                and SELF_URL
-            ):
-                logger.warning(
-                    f"🚨 Watchdog: Railway ({WATCHDOG_FAILURES} marta) javob bermadi! "
-                    "Backup faollashtirilmoqda..."
-                )
-                try:
-                    await set_webhook()
-                    logger.info("✅ Watchdog: Backup faollashtirildi!")
-                except Exception as e:
-                    logger.error(f"❌ Watchdog: Backup faollashtirishda xatolik: {e}")
+                # Threshold ga yetdimi va webhook hali bu serverda emasmi?
+                if (
+                    _watchdog_fail_count >= WATCHDOG_FAILURES
+                    and not is_self_active
+                    and SELF_URL
+                ):
+                    logger.warning(
+                        f"🚨 Watchdog: Railway ({WATCHDOG_FAILURES} marta) javob bermadi! "
+                        "Backup faollashtirilmoqda..."
+                    )
+                    try:
+                        await set_webhook()
+                        logger.info("✅ Watchdog: Backup faollashtirildi!")
+                    except Exception as e:
+                        logger.error(f"❌ Watchdog: Backup faollashtirishda xatolik: {e}")
 
-        await asyncio.sleep(WATCHDOG_INTERVAL)
+            await asyncio.sleep(WATCHDOG_INTERVAL)
 
 
 async def start_health_server():
@@ -1161,6 +1161,11 @@ async def set_menu():
         BotCommand(
             command="activate",
             description="✅ Webhook-ni faollashtirish"
+        ),
+
+        BotCommand(
+            command="deactivate",
+            description="❌ Webhook-ni o'chirish"
         )
 
     ]

@@ -1,21 +1,19 @@
 # ====================================
 # RENDER DEPLOY KONFIGURATSIYASI
 # ====================================
-# Bu fayl orqali Telegram botni Render.com ga deploy qilish mumkin
 # Render dashboard -> New Web Service -> Deploy from Git repo
-# Yoki shu faylni repo'ga qo'yib, Blueprint orqali deploy qiling
+# Yoki Blueprint (shu fayl) orqali deploy qiling
 
 services:
   - type: web
     name: kinochi-ota-bot
     runtime: python
-    pythonVersion: 3.12
     region: frankfurt  # Yevropa - Telegram uchun tezroq
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python main.py
     
-    # Environment variables (Render dashboardda ham qo'shish mumkin)
+    # Environment variables
     envVars:
       - key: BOT_TOKEN
         sync: false  # Dashboarddan kiritiladi
@@ -29,6 +27,13 @@ services:
         value: /data
       - key: PORT
         value: 10000
+      # ⚠️ MUHIM: Python versiyasini majburlash
+      # Dashboardda PYTHON_VERSION o'rnatilgan bo'lsa, u blueprint dan ustun turadi!
+      # Dashboarddagi eski PYTHON_VERSION=3.12 ni o'chirib tashlang!
+      - key: PYTHON_VERSION
+        value: "3.12.8"
+      - key: PIP_DEFAULT_TIMEOUT
+        value: "120"
 
     # Health check
     healthCheckPath: /health
