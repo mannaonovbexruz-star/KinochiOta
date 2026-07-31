@@ -61,6 +61,12 @@ python main.py
 > `database.json` repodan avtomatik tiklanadi, lekin `premium_users.json` qayta deploy'da yo'qoladi.
 > Premium ma'lumotlar muhim bo'lsa, paid rejaga o'tishni o'ylab ko'ring.
 
+> 💡 **Free tierda ishonchli failover**: Render free servislar 15 daqiqa harakatsizlikdan keyin uxlab qoladi —
+> uxlab yotganda watchdog ishlamaydi. Failover ishonchli bo'lishi uchun bepul uptime pinger
+> (masalan UptimeRobot) orqali har 5 daqiqada `/health` manzilini tekshirtiring.
+> Yangi akkauntlarda free reja mavjud bo'lmasligi mumkin — blueprint xato bersa, dashboardda
+> plan nomini o'zgartiring.
+
 ## 📋 Buyruqlar
 
 | Buyruq | Tavsif |
