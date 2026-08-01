@@ -17,5 +17,19 @@ if not TOKEN:
 # Mahalliy kompyuterda loyiha papkasi ichida
 DATA_DIR = os.getenv("DATA_DIR", os.path.dirname(os.path.abspath(__file__)))
 
-# Health check server porti (Railway avtomatik PORT beradi)
+# Agar sozlangan DATA_DIR yozib bo'lmaydigan bo'lsa (masalan Render free
+# tier'da /data yaratib bo'lmasa), ishonchli joyga tushamiz. Aks holda
+# lock/premium/database yozish xatosi app'ni ishdan chiqarib, healthcheck
+# muvaffaqiyatsiz bo'lib qolardi.
+try:
+    os.makedirs(DATA_DIR, exist_ok=True)
+    _probe = os.path.join(DATA_DIR, ".write_probe")
+    with open(_probe, "w", encoding="utf-8") as _f:
+        _f.write("ok")
+    os.remove(_probe)
+except OSError:
+    DATA_DIR = os.path.dirname(os.path.abspath(__file__))
+    print(f"⚠️ DATA_DIR yozib bo'lmadi, fallback: {DATA_DIR}", file=sys.stderr)
+
+# Health check server porti (Railway/Render avtomatik PORT beradi)
 PORT = int(os.getenv("PORT", 8080))

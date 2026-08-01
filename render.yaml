@@ -27,8 +27,8 @@ services:
         generateValue: true  # Avtomatik random kalit yaratadi
       - key: DATA_DIR
         value: /data
-      - key: PORT
-        value: 10000
+      # PORT ni Render avtomatik beradi (odatda 10000) — qo'lda belgilash
+      # konflikt chiqarib, healthcheck muvaffaqiyatsiz bo'lishiga sabab bo'ladi!
       # ⚠️ MUHIM: Python versiyasini majburlash
       # Dashboardda PYTHON_VERSION o'rnatilgan bo'lsa, u blueprint dan ustun turadi!
       # Dashboarddagi eski PYTHON_VERSION=3.12 ni o'chirib tashlang!

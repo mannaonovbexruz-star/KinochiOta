@@ -78,13 +78,17 @@ def acquire_single_instance_lock():
     """
     try:
         os.makedirs(DATA_DIR, exist_ok=True)
-    except OSError:
-        pass
+    except OSError as e:
+        logger.warning(f"⚠️ DATA_DIR yaratib bo'lmadi ({DATA_DIR}): {e}")
 
     # Lock faylni atomik yaratishga harakat qilamiz (O_EXCL)
     for attempt in range(2):
         try:
             fd = os.open(LOCK_FILE, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except (FileNotFoundError, PermissionError) as e:
+            # DATA_DIR mavjud emas yoki yozib bo'lmaydi — app ishdan chiqmaydi
+            logger.warning(f"⚠️ Lock fayl yaratib bo'lmadi ({LOCK_FILE}): {e}")
+            return False
         except FileExistsError:
             old_pid = 0
             try:
@@ -1369,18 +1373,42 @@ async def set_menu():
 # MAIN
 # =========================
 
+# Container muhitini aniqlash (Render / Railway)
+# Container ichida har bir instansiya alohida bo'ladi — single-instance
+# lock shart emas. Aks holda eski bot.lock fayli yoki PID takrorlanishi
+# tufayli app chiqib ketib, healthcheck muvaffaqiyatsiz bo'lishi mumkin.
+IS_CONTAINER = bool(
+    os.getenv("RENDER")
+    or os.getenv("RENDER_SERVICE_ID")
+    or os.getenv("RAILWAY_SERVICE_ID")
+    or os.getenv("RAILWAY_SERVICE_NAME")
+)
+
+
 async def main():
 
-    # 1) Bitta kompyuterda faqat bitta instansiya ishlashini ta'minlash
-    if not acquire_single_instance_lock():
-        sys.exit(1)
+    # 1) Single-instance lock — faqat mahalliy (containersiz) rejimda
+    if not IS_CONTAINER:
+        try:
+            if not acquire_single_instance_lock():
+                logger.error("🚫 Single-instance lock olinmadi!")
+                sys.exit(1)
+        except Exception as e:
+            logger.warning(f"⚠️ Single-instance lock xatosi (davom etiladi): {e}")
+    else:
+        logger.info("📦 Container muhiti aniqlandi — single-instance lock o'tkazib yuboriladi")
 
-    # 2) Port band bo'lsa — aniq xatolik bilan chiqamiz
+    # 2) Port band bo'lsa — ogohlantiramiz, lekin chiqib ketmaymiz.
+    #    Aslida server o'zi EADDRINUSE bilan aniq xatolik chiqaradi.
     if not _is_port_free(PORT):
-        _log_port_busy(PORT)
-        sys.exit(1)
+        logger.warning(f"⚠️ {PORT}-port band ko'rinmoqda, lekin davom etilmoqda...")
 
-    await set_menu()
+    # 3) Bot menyusini o'rnatish (Telegram API). Xato bo'lsa ham server
+    #    ishga tushishi kerak — aks holda healthcheck muvaffaqiyatsiz bo'ladi.
+    try:
+        await set_menu()
+    except Exception as e:
+        logger.warning(f"⚠️ Bot menyusini o'rnatishda xatolik (davom etiladi): {e}")
 
     if MODE == "webhook":
 
@@ -1420,8 +1448,9 @@ async def main():
         setup_application(app, dp, bot=bot)
 
         # Watchdog-ni ishga tushiramiz (asosiy serverni kuzatish)
+        watchdog_task = None
         if PRIMARY_URL:
-            asyncio.create_task(watchdog_check())
+            watchdog_task = asyncio.create_task(watchdog_check())
             logger.info(f"👁 Watchdog: {PRIMARY_URL} har {WATCHDOG_INTERVAL}s tekshiriladi")
         else:
             logger.info("👁 Watchdog o'chirilgan. PRIMARY_URL sozlanmagan.")
@@ -1429,14 +1458,33 @@ async def main():
         logger.info("🚀 Webhook server ishga tushdi...")
         logger.info(f"📌 Aktivatsiya: {SELF_URL}/activate/{SECRET_KEY}")
 
+        # web.run_app o'rniga AppRunner — hammasi bitta event loop'da ishlaydi,
+        # shuning uchun watchdog ham to'g'ri ishlaydi va healthcheck o'tadi.
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, "0.0.0.0", PORT)
         try:
-            web.run_app(app, host="0.0.0.0", port=PORT, print=None)
+            await site.start()
         except OSError as e:
             if getattr(e, "errno", None) in (10048, 98, 48):
                 _log_port_busy(PORT)
             else:
                 logger.error(f"Webhook serverni ishga tushirishda xatolik: {e}")
+            await runner.cleanup()
             sys.exit(1)
+
+        logger.info(f"✅ Health check: http://0.0.0.0:{PORT}/health")
+
+        # Serverni ochiq ushlab turamiz
+        try:
+            while True:
+                await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            pass
+        finally:
+            if watchdog_task:
+                watchdog_task.cancel()
+            await runner.cleanup()
 
     else:
 
