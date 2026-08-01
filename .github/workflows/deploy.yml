@@ -52,8 +52,8 @@ jobs:
 
       - name: 🔌 Module import test
         env:
-          # config.py BOT_TOKEN talab qiladi — CI uchun dummy qiymat
-          BOT_TOKEN: skip-ci-check
+          # config.py BOT_TOKEN talab qiladi — import testi uchun
+          BOT_TOKEN: 8951088634:AAGNZf4iK7et8lvPgQu3J3pB3HWTaqMfe7E
         run: |
           python -c "
 import config
