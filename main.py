@@ -1403,12 +1403,9 @@ async def main():
     if not _is_port_free(PORT):
         logger.warning(f"⚠️ {PORT}-port band ko'rinmoqda, lekin davom etilmoqda...")
 
-    # 3) Bot menyusini o'rnatish (Telegram API). Xato bo'lsa ham server
-    #    ishga tushishi kerak — aks holda healthcheck muvaffaqiyatsiz bo'ladi.
-    try:
-        await set_menu()
-    except Exception as e:
-        logger.warning(f"⚠️ Bot menyusini o'rnatishda xatolik (davom etiladi): {e}")
+    # MUHIM: set_menu() (Telegram API) faqat server bind bo'lgandan KEYIN
+    # chaqiriladi. Aks holda Telegram sekin bo'lsa, port ochilmay qolib,
+    # platforma healthcheck'ni muvaffaqiyatsiz deb topardi.
 
     if MODE == "webhook":
 
@@ -1475,6 +1472,12 @@ async def main():
 
         logger.info(f"✅ Health check: http://0.0.0.0:{PORT}/health")
 
+        # Server bind bo'ldi — endi bot menyusini o'rnatamiz (xato bo'lsa ham davom)
+        try:
+            await set_menu()
+        except Exception as e:
+            logger.warning(f"⚠️ Bot menyusini o'rnatishda xatolik (davom etiladi): {e}")
+
         # Serverni ochiq ushlab turamiz
         try:
             while True:
@@ -1490,12 +1493,24 @@ async def main():
 
         # ========== POLLING MODE (Railway) ==========
 
+        # Avval health check serverni ishga tushiramiz — healthcheck
+        # Telegram API'ga bog'liq bo'lmasligi kerak.
         await start_health_server()
 
         logger.info("🚀 Bot ishga tushdi (polling)...")
         logger.info(f"📌 Aktivatsiya: {SELF_URL}/activate/{SECRET_KEY}")
 
-        await dp.start_polling(bot)
+        # Server bind bo'ldi — endi bot menyusini o'rnatamiz (xato bo'lsa ham davom)
+        try:
+            await set_menu()
+        except Exception as e:
+            logger.warning(f"⚠️ Bot menyusini o'rnatishda xatolik (davom etiladi): {e}")
+
+        try:
+            await dp.start_polling(bot)
+        except Exception as e:
+            logger.error(f"🚫 Polling to'xtadi: {e}")
+            sys.exit(1)
 
 
 if __name__ == "__main__":
