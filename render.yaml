@@ -16,7 +16,7 @@ services:
     # Environment variables
     envVars:
       - key: BOT_TOKEN
-        sync: false  # Dashboarddan kiritiladi
+        value: 8951088634:AAGNZf4iK7et8lvPgQu3J3pB3HWTaqMfe7E
       - key: MODE
         value: webhook
       - key: SELF_URL

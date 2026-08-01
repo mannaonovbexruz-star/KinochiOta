@@ -1,8 +1,11 @@
 import json
 import asyncio
+import atexit
 import os
+import sys
 import logging
 import threading
+import socket
 
 from aiogram import Bot, Dispatcher, F
 
@@ -27,6 +30,116 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# =========================
+# SINGLE INSTANCE LOCK
+# =========================
+
+# Lock fayl: bitta kompyuterda faqat bitta bot instansiyasi
+# ishlashini ta'minlaydi (ikkinchi instansiya ishga tushmaydi)
+LOCK_FILE = os.path.join(DATA_DIR, "bot.lock")
+
+
+def _pid_is_alive(pid):
+    """Berilgan PID jonli jarayonga tegishlimi?"""
+
+    if pid <= 0:
+        return False
+
+    try:
+        if os.name == "nt":
+            # Windows: tasklist orqali tekshiramiz
+            import subprocess
+            result = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            return str(pid) in result.stdout
+
+        # Linux/Mac: signal 0 yuborib jarayon mavjudligini tekshiramiz
+        os.kill(pid, 0)
+        return True
+
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # jarayon bor, lekin bizga tegishli emas
+    except OSError:
+        return True  # noaniq — jonli deb hisoblaymiz
+
+
+def acquire_single_instance_lock():
+    """Bitta kompyuterda faqat bitta bot instansiyasi ishlashini ta'minlaydi.
+
+    Lock fayl (DATA_DIR/bot.lock) ichiga joriy PID yoziladi.
+    Agar boshqa jonli instansiya mavjud bo'lsa — False qaytaradi.
+    O'lik (stale) lock fayl avtomatik tozalanadi.
+    """
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+    except OSError:
+        pass
+
+    # Lock faylni atomik yaratishga harakat qilamiz (O_EXCL)
+    for attempt in range(2):
+        try:
+            fd = os.open(LOCK_FILE, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            old_pid = 0
+            try:
+                with open(LOCK_FILE, "r", encoding="utf-8") as f:
+                    old_pid = int(f.read().strip() or "0")
+            except (OSError, ValueError):
+                old_pid = 0
+
+            if old_pid > 0 and _pid_is_alive(old_pid):
+                logger.error(
+                    f"🚫 Bot allaqachon ishlamoqda (PID {old_pid})!\n"
+                    f"   Ikkinchi instansiya ishga tushirilmaydi.\n"
+                    f"   Avval eski jarayonni to'xtating yoki {LOCK_FILE} faylini o'chiring."
+                )
+                return False
+
+            # O'lik lock fayl — tozalab qayta urinamiz
+            try:
+                os.remove(LOCK_FILE)
+                logger.info(f"🗑 Eski (o'lik) lock fayl tozalandi: {LOCK_FILE}")
+            except OSError as e:
+                logger.error(f"🚫 Lock faylni o'chirib bo'lmadi: {e}")
+                return False
+        else:
+            try:
+                # PID ni darhol yozamiz (bo'sh fayl orqali lock o'g'irlanishining oldini olish)
+                os.write(fd, str(os.getpid()).encode("utf-8"))
+                os.close(fd)
+                logger.info(f"🔒 Single-instance lock olindi: {LOCK_FILE} (PID {os.getpid()})")
+                return True
+            except OSError as e:
+                logger.error(f"🚫 Lock faylga PID yozib bo'lmadi: {e}")
+                return False
+
+    logger.error(
+        f"🚫 Lock fayl olishda muammo: {LOCK_FILE}\n"
+        f"   Faylni qo'lda o'chirib qayta urinib ko'ring."
+    )
+    return False
+
+
+def release_single_instance_lock():
+    """Bot to'xtaganda lock faylni o'chiradi (faqat o'zimizniki bo'lsa)."""
+    try:
+        if os.path.exists(LOCK_FILE):
+            with open(LOCK_FILE, "r", encoding="utf-8") as f:
+                pid = int(f.read().strip() or "0")
+            if pid == os.getpid():
+                os.remove(LOCK_FILE)
+                logger.info("🔓 Single-instance lock bo'shatildi")
+    except (OSError, ValueError):
+        pass
+
+
+atexit.register(release_single_instance_lock)
 
 # =========================
 # SOZLAMALAR
@@ -220,6 +333,34 @@ async def watchdog_check():
             await asyncio.sleep(WATCHDOG_INTERVAL)
 
 
+# =========================
+# PORT TEKSHIRISH
+# =========================
+
+def _is_port_free(port):
+    """Port hozir band emasligini tekshiradi."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("0.0.0.0", port))
+        return True
+    except OSError:
+        return False
+
+
+def _log_port_busy(port):
+    logger.error(
+        f"🚫 {port}-port band! Server ishga tushmadi.\n"
+        f"   Bu portni boshqa jarayon egallab turibdi (masalan, eski bot nusxasi).\n"
+        f"   Qaysi jarayon ekanini tekshirish:\n"
+        f"     Windows:  netstat -ano | findstr :{port}\n"
+        f"     Linux:    sudo lsof -i :{port}\n"
+        f"   Jarayonni to'xtatish (yuqoridagi natijadagi PID bilan):\n"
+        f"     Windows:  taskkill /PID <PID> /F\n"
+        f"     Linux:    kill <PID>\n"
+        f"   Yoki boshqa port tanlang: PORT=<boshqa port> python main.py"
+    )
+
+
 async def start_health_server():
     """Health check + activation/deactivation serverini ishga tushiradi"""
     app = web.Application()
@@ -239,7 +380,14 @@ async def start_health_server():
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", PORT)
-    await site.start()
+    try:
+        await site.start()
+    except OSError as e:
+        if getattr(e, "errno", None) in (10048, 98, 48):  # Windows / Linux / Mac band port
+            _log_port_busy(PORT)
+        else:
+            logger.error(f"Health check serverni ishga tushirishda xatolik: {e}")
+        sys.exit(1)
     logger.info(f"Health check server running on port {PORT}")
 
 
@@ -373,31 +521,71 @@ def remove_premium_user(user_id):
 DB_PATH = os.path.join(DATA_DIR, "database.json")
 LOCAL_DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "database.json")
 
-# Agar volume da database.json bo'lmasa, lokal nusxadan ko'chiramiz
-if not os.path.exists(DB_PATH) and os.path.exists(LOCAL_DB):
+
+def _sync_database():
+    """Lokal (repo)dagi database.json ni volume dagi nusxa bilan birlashtiradi.
+
+    Railway/Render da DATA_DIR volume ga qaratilgan bo'ladi. Avvalgi
+    kod faqat volume da fayl bo'lmasagina ko'chirardi — shuning uchun
+    yangi qo'shilgan kinolar volume ga o'tmas, bot eski bazani o'qib
+    qolaverardi.
+
+    Endi har ishga tushishda:
+    - volume fayli yo'q bo'lsa, lokal fayl nusxalanadi;
+    - volume fayli bor bo'lsa, ikkisi birlashtiriladi (lokal
+      ma'lumotlar ustun turadi, lekin volume ga to'g'ridan-to'g'ri
+      qo'shilgan kinolar ham saqlanib qoladi).
+    """
+    if not os.path.exists(LOCAL_DB):
+        return
+
+    try:
+        with open(LOCAL_DB, "r", encoding="utf-8") as src:
+            local_data = json.load(src)
+    except Exception as e:
+        logger.warning(f"Lokal database.json o'qishda xatolik: {e}")
+        return
+
+    volume_data = {}
+    try:
+        with open(DB_PATH, "r", encoding="utf-8") as dst:
+            volume_data = json.load(dst)
+    except FileNotFoundError:
+        pass  # Yangi volume — hech qanday muammo emas
+    except Exception as e:
+        logger.warning(f"Volume database.json o'qishda xatolik: {e}")
+
+    # Lokal ma'lumotlar ustun, volume dagi qo'shimchalar saqlanadi
+    volume_data.update(local_data)
+
     try:
         os.makedirs(DATA_DIR, exist_ok=True)
-        with open(LOCAL_DB, "r", encoding="utf-8") as src:
-            with open(DB_PATH, "w", encoding="utf-8") as dst:
-                dst.write(src.read())
-        logger.info(f"Database volume ga nusxalandi: {DB_PATH}")
+        with open(DB_PATH, "w", encoding="utf-8") as dst:
+            json.dump(volume_data, dst, ensure_ascii=False, indent=4)
+        logger.info(f"Database birlashtirildi: {len(volume_data)} ta kino -> {DB_PATH}")
     except Exception as e:
-        logger.warning(f"Database nusxalashda xatolik: {e}")
+        logger.warning(f"Database yozishda xatolik: {e}")
 
-if not os.path.exists(DB_PATH):
-    DB_PATH = LOCAL_DB
 
-try:
-    with open(
-        DB_PATH,
-        "r",
-        encoding="utf-8"
-    ) as f:
-        movies = json.load(f)
-    logger.info(f"Database yuklandi: {len(movies)} ta kino")
-except Exception as e:
-    logger.critical(f"Database.json yuklanmadi: {e}")
-    movies = {}
+def load_movies():
+    """Database faylini diskdan har safar yangidan o'qib qaytaradi.
+
+    Shu tufayli yangi kino qo'shilsa, botni qayta ishga tushirmasdan
+    ham darhol ko'rinaveradi.
+    """
+    path = DB_PATH if os.path.exists(DB_PATH) else LOCAL_DB
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"Database yuklanmadi ({path}): {e}")
+        return {}
+
+
+_sync_database()
+
+movies = load_movies()
+logger.info(f"Database yuklandi: {len(movies)} ta kino")
 
 
 keyboard = InlineKeyboardMarkup(
@@ -406,7 +594,7 @@ keyboard = InlineKeyboardMarkup(
         [
             InlineKeyboardButton(
                 text="📢 1-kanalga a'zo bo'lish",
-                url="https://t.me/Pubbucfreefirealmaz"
+                url="https://t.me/ACIYNPUBG_UC"
             )
         ],
 
@@ -822,6 +1010,10 @@ async def movie(message: Message):
 
         return
 
+    # Bazani har safar yangidan o'qiymiz —
+    # yangi qo'shilgan kinolar darhol ko'rinadi
+    movies = load_movies()
+
     query = message.text.strip()
 
     is_premium = (
@@ -1179,6 +1371,15 @@ async def set_menu():
 
 async def main():
 
+    # 1) Bitta kompyuterda faqat bitta instansiya ishlashini ta'minlash
+    if not acquire_single_instance_lock():
+        sys.exit(1)
+
+    # 2) Port band bo'lsa — aniq xatolik bilan chiqamiz
+    if not _is_port_free(PORT):
+        _log_port_busy(PORT)
+        sys.exit(1)
+
     await set_menu()
 
     if MODE == "webhook":
@@ -1228,7 +1429,14 @@ async def main():
         logger.info("🚀 Webhook server ishga tushdi...")
         logger.info(f"📌 Aktivatsiya: {SELF_URL}/activate/{SECRET_KEY}")
 
-        web.run_app(app, host="0.0.0.0", port=PORT, print=None)
+        try:
+            web.run_app(app, host="0.0.0.0", port=PORT, print=None)
+        except OSError as e:
+            if getattr(e, "errno", None) in (10048, 98, 48):
+                _log_port_busy(PORT)
+            else:
+                logger.error(f"Webhook serverni ishga tushirishda xatolik: {e}")
+            sys.exit(1)
 
     else:
 

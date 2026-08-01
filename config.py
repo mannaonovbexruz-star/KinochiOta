@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Telegram Bot Token (majburiy)
+# Tokenni .env faylida BOT_TOKEN=... sifatida yoki platforma dashboardida saqlang
 TOKEN = os.getenv("BOT_TOKEN")
 if not TOKEN:
     print("❌ XATOLIK: BOT_TOKEN environment variable topilmadi!", file=sys.stderr)
