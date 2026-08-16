@@ -17,6 +17,7 @@ from aiohttp import web
 
 import config
 from database.admins import ping as admins_ping
+from database.channels import ping as channels_ping
 from database.client import ping as db_ping
 from handlers import register_routers
 
@@ -76,6 +77,12 @@ async def main() -> None:
     elif not config.ADMIN_PASSWORD:
         logger.warning(
             "⚠️ ADMIN_PASSWORD sozlanmagan — parol bilan admin bo'lish o'chiq."
+        )
+
+    if not await asyncio.to_thread(channels_ping):
+        logger.warning(
+            "⚠️ `channels` jadvali topilmadi — sql/004_channels.sql ni ishga "
+            "tushiring. Majburiy obuna ishlamaydi."
         )
 
     bot = Bot(

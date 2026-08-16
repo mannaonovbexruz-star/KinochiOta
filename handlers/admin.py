@@ -5,11 +5,13 @@ from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
+import config
+from database import channels as channels_db
 from database import movies as movies_db
 from database.movies import MovieAlreadyExistsError
 from handlers.filters import IsAdmin
 from handlers.keyboards import BTN_ADD, BTN_DELETE, BTN_LIST, BTN_STATS
-from handlers.states import AddMovie, DeleteMovie
+from handlers.states import AddChannel, AddMovie, DeleteMovie
 
 logger = logging.getLogger(__name__)
 
@@ -229,6 +231,48 @@ async def process_title(message: Message, state: FSMContext) -> None:
 @router.message(AddMovie.waiting_for_title)
 async def process_title_invalid(message: Message) -> None:
     await message.answer("⚠️ Kino nomini <b>matn</b> ko'rinishida yuboring.")
+
+
+# =========================
+# KANAL QO'SHISH (FSM, faqat egasi)
+# =========================
+
+
+@router.message(AddChannel.waiting_for_channel, F.text)
+async def process_channel(message: Message, state: FSMContext) -> None:
+    if not config.is_owner(message.from_user.id):
+        await state.clear()
+        await message.answer("❌ Bu amal faqat egasi uchun.")
+        return
+
+    chat_id = message.text.strip()
+    if not (chat_id.startswith("@") or chat_id.lstrip("-").isdigit()):
+        await message.answer(
+            "⚠️ Noto'g'ri format. <code>@KanalNomi</code> yoki "
+            "<code>-1001234567890</code> ko'rinishida yuboring."
+        )
+        return
+
+    # Kanalni tekshiramiz: bot u yerda admin bo'lmasa obunani tekshira olmaydi
+    title, url, warning = chat_id, None, ""
+    try:
+        chat = await message.bot.get_chat(chat_id)
+        title = chat.title or chat_id
+        url = f"https://t.me/{chat.username}" if chat.username else None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Kanalni tekshirib bo'lmadi (%s): %s", chat_id, exc)
+        warning = (
+            "\n\n⚠️ <b>Diqqat:</b> kanalga ulanib bo'lmadi. Botni o'sha kanalga "
+            "<b>admin</b> qiling, aks holda obuna tekshirilmaydi."
+        )
+
+    await channels_db.add_channel(chat_id, title, url)
+    await state.clear()
+    await message.answer(
+        f"✅ Kanal qo'shildi: <code>{chat_id}</code>\n"
+        f"📢 {title}{warning}\n\n"
+        "Panelni ochish: /admin"
+    )
 
 
 # =========================

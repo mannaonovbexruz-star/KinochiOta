@@ -23,11 +23,17 @@ from aiogram.enums import ParseMode  # noqa: E402
 from aiogram.types import (  # noqa: E402
     CallbackQuery,
     Chat,
+    ChatFullInfo,
+    ChatMemberLeft,
+    ChatMemberMember,
     Message,
     Update,
     User,
     Video,
 )
+
+# Majburiy obuna testlari uchun: {(kanal, user_id): "member" | "left" | "error"}
+SUBSCRIPTIONS: dict[tuple[str, int], str] = {}
 
 TEST_TOKEN = "111111:TEST-TOKEN-NOT-REAL"
 
@@ -68,6 +74,27 @@ class FakeSession(BaseSession):
             )
         if name == "GetMe":
             return User(id=1, is_bot=True, first_name="Bot", username="test_bot")
+
+        # Majburiy obuna tekshiruvi: SUBSCRIPTIONS jadvalidan javob beramiz
+        if name == "GetChatMember":
+            key = (str(method.chat_id), method.user_id)
+            status = SUBSCRIPTIONS.get(key, "left")
+            if status == "error":
+                raise RuntimeError("Bot kanalda admin emas (test)")
+            user = User(id=method.user_id, is_bot=False, first_name="X")
+            if status in ("left", "kicked"):
+                return ChatMemberLeft(user=user)
+            return ChatMemberMember(user=user)
+
+        if name == "GetChat":
+            return ChatFullInfo(
+                id=-1001234567890,
+                type="channel",
+                title=f"Kanal {method.chat_id}",
+                username=str(method.chat_id).lstrip("@"),
+                accent_color_id=0,
+                max_reaction_count=11,
+            )
         return True
 
 

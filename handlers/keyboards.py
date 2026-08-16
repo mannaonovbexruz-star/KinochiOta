@@ -48,8 +48,14 @@ CB_LIST = "adm:list"
 CB_STATS = "adm:stats"
 CB_DELETE = "adm:del"
 CB_ADMINS = "adm:admins"
+CB_CHANNELS = "adm:channels"
 CB_BACK = "adm:back"
 CB_REMOVE_PREFIX = "adm:rm:"
+
+# Kanal boshqaruvi
+CB_CHANNEL_ADD = "ch:add"
+CB_CHANNEL_REMOVE_PREFIX = "ch:rm:"
+CB_CHANNEL_CLEAR = "ch:clear"
 
 
 def admin_menu(is_owner: bool) -> InlineKeyboardMarkup:
@@ -64,7 +70,35 @@ def admin_menu(is_owner: bool) -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="📊 Statistika", callback_data=CB_STATS),
     )
     if is_owner:
-        builder.row(InlineKeyboardButton(text="👥 Adminlar", callback_data=CB_ADMINS))
+        builder.row(
+            InlineKeyboardButton(text="👥 Adminlar", callback_data=CB_ADMINS),
+            InlineKeyboardButton(text="📢 Kanallar", callback_data=CB_CHANNELS),
+        )
+    return builder.as_markup()
+
+
+def channels_menu(channels: list[dict]) -> InlineKeyboardMarkup:
+    """Majburiy obuna kanallarini boshqarish (faqat egasi)."""
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="➕ Kanal qo'shish", callback_data=CB_CHANNEL_ADD))
+
+    for channel in channels:
+        chat_id = channel["chat_id"]
+        builder.row(
+            InlineKeyboardButton(
+                text=f"❌ {chat_id} ni o'chirish",
+                callback_data=f"{CB_CHANNEL_REMOVE_PREFIX}{chat_id}",
+            )
+        )
+
+    if channels:
+        builder.row(
+            InlineKeyboardButton(
+                text="⏮️ Obunani butunlay o'chirish", callback_data=CB_CHANNEL_CLEAR
+            )
+        )
+
+    builder.row(InlineKeyboardButton(text="⬅️ Orqaga", callback_data=CB_BACK))
     return builder.as_markup()
 
 

@@ -16,3 +16,9 @@ class DeleteMovie(StatesGroup):
     """/delete buyrug'i uchun: qaysi kodni o'chirish kerakligini so'raydi."""
 
     waiting_for_code = State()
+
+
+class AddChannel(StatesGroup):
+    """Majburiy obuna kanalini qo'shish (faqat egasi)."""
+
+    waiting_for_channel = State()

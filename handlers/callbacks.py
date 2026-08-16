@@ -15,21 +15,27 @@ from aiogram.types import CallbackQuery
 
 import config
 from database import admins as admins_db
+from database import channels as channels_db
 from database import movies as movies_db
 from handlers.filters import IsAdmin
 from handlers.keyboards import (
     CB_ADD,
     CB_ADMINS,
     CB_BACK,
+    CB_CHANNEL_ADD,
+    CB_CHANNEL_CLEAR,
+    CB_CHANNEL_REMOVE_PREFIX,
+    CB_CHANNELS,
     CB_DELETE,
     CB_LIST,
     CB_REMOVE_PREFIX,
     CB_STATS,
     admins_menu,
     back_menu,
+    channels_menu,
 )
 from handlers.panel import render_panel
-from handlers.states import DeleteMovie
+from handlers.states import AddChannel, DeleteMovie
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +133,83 @@ async def cb_admins(callback: CallbackQuery) -> None:
         body = f"👥 <b>Adminlar ({len(items)} ta):</b>\n\n{rows}"
 
     await _edit(callback, body, admins_menu(items))
+
+
+# =========================
+# MAJBURIY OBUNA KANALLARI (faqat egasi)
+# =========================
+
+
+async def _render_channels(callback: CallbackQuery) -> None:
+    items = await channels_db.list_channels(force=True)
+    if not items:
+        body = (
+            "📢 <b>Majburiy obuna</b>\n\n"
+            "Hozircha kanal yo'q — majburiy obuna <b>o'chiq</b>, "
+            "hamma botdan erkin foydalanadi."
+        )
+    else:
+        rows = "\n".join(
+            f"• <code>{c['chat_id']}</code>" + (f" — {c['title']}" if c.get("title") else "")
+            for c in items
+        )
+        body = f"📢 <b>Majburiy obuna ({len(items)} ta):</b>\n\n{rows}"
+
+    await _edit(callback, body, channels_menu(items))
+
+
+@router.callback_query(F.data == CB_CHANNELS)
+async def cb_channels(callback: CallbackQuery) -> None:
+    if not config.is_owner(callback.from_user.id):
+        await callback.answer("❌ Bu bo'lim faqat egasi uchun.", show_alert=True)
+        return
+    await callback.answer()
+    await _render_channels(callback)
+
+
+@router.callback_query(F.data == CB_CHANNEL_ADD)
+async def cb_channel_add(callback: CallbackQuery, state: FSMContext) -> None:
+    if not config.is_owner(callback.from_user.id):
+        await callback.answer("❌ Bu amal faqat egasi uchun.", show_alert=True)
+        return
+
+    await callback.answer()
+    await state.set_state(AddChannel.waiting_for_channel)
+    await _edit(
+        callback,
+        "➕ <b>Kanal qo'shish</b>\n\n"
+        "Kanal manzilini yuboring: <code>@KanalNomi</code>\n"
+        "yoki ID: <code>-1001234567890</code>\n\n"
+        "⚠️ Bot o'sha kanalda <b>admin</b> bo'lishi shart, aks holda "
+        "obunani tekshira olmaydi.\n\n"
+        "❌ Bekor qilish: /cancel",
+        back_menu(),
+    )
+
+
+@router.callback_query(F.data.startswith(CB_CHANNEL_REMOVE_PREFIX))
+async def cb_channel_remove(callback: CallbackQuery) -> None:
+    if not config.is_owner(callback.from_user.id):
+        await callback.answer("❌ Bu amal faqat egasi uchun.", show_alert=True)
+        return
+
+    chat_id = callback.data[len(CB_CHANNEL_REMOVE_PREFIX):]
+    removed = await channels_db.remove_channel(chat_id)
+    await callback.answer("🗑 O'chirildi" if removed else "🔍 Topilmadi")
+    logger.info("Kanal o'chirildi: %s (egasi: %s)", chat_id, callback.from_user.id)
+    await _render_channels(callback)
+
+
+@router.callback_query(F.data == CB_CHANNEL_CLEAR)
+async def cb_channel_clear(callback: CallbackQuery) -> None:
+    if not config.is_owner(callback.from_user.id):
+        await callback.answer("❌ Bu amal faqat egasi uchun.", show_alert=True)
+        return
+
+    count = await channels_db.clear_channels()
+    await callback.answer(f"⏮️ {count} ta kanal o'chirildi — majburiy obuna o'chdi", show_alert=True)
+    logger.info("Majburiy obuna o'chirildi (egasi: %s)", callback.from_user.id)
+    await _render_channels(callback)
 
 
 @router.callback_query(F.data.startswith(CB_REMOVE_PREFIX))
