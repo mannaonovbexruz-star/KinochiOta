@@ -41,13 +41,22 @@ async def cmd_id(message: Message) -> None:
     """
     me = await message.bot.get_me()
     user_id = message.from_user.id
-    await message.answer(
-        f"🤖 Bot: @{me.username}\n"
-        f"👤 Sizning user_id: <code>{user_id}</code>\n"
-        f"💬 chat_id: <code>{message.chat.id}</code>\n"
-        f"🔑 ADMIN_ID ro'yxati: <code>{sorted(config.ADMIN_IDS)}</code>\n"
-        f"{'✅ Siz ADMINSIZ' if config.is_admin(user_id) else '❌ Siz admin EMASSIZ'}"
-    )
+    admin = config.is_admin(user_id)
+
+    lines = [
+        f"🤖 Bot: @{me.username}",
+        f"👤 Sizning user_id: <code>{user_id}</code>",
+        f"💬 chat_id: <code>{message.chat.id}</code>",
+    ]
+    # ADMIN_ID ro'yxatini faqat adminning o'ziga ko'rsatamiz — begona odamga
+    # admin ID'sini berish uni nishonga olishni osonlashtiradi (spam, fishing).
+    if admin:
+        lines.append(f"🔑 ADMIN_ID ro'yxati: <code>{sorted(config.ADMIN_IDS)}</code>")
+        lines.append("✅ Siz ADMINSIZ")
+    else:
+        lines.append("👥 Siz oddiy foydalanuvchisiz")
+
+    await message.answer("\n".join(lines))
 
 
 @router.message(StateFilter(None), F.text)
