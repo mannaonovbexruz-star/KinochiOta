@@ -46,33 +46,41 @@ jobs:
 
       - name: 🔍 Python syntax check
         run: |
-          python -m py_compile main.py
-          python -m py_compile config.py
+          python -m compileall -q bot.py config.py handlers database scripts main.py
           echo "✅ Barcha fayllar sintaksis to'g'ri"
 
       - name: 🔌 Module import test
         env:
-          # config.py BOT_TOKEN talab qiladi — import testi uchun
-          BOT_TOKEN: 8951088634:AAGNZf4iK7et8lvPgQu3J3pB3HWTaqMfe7E
+          # ⚠️ Bu yerga HAQIQIY token yozilmaydi! config.py import paytida
+          # hech narsa talab qilmaydi (tekshiruv bot.py dagi validate() da),
+          # shuning uchun soxta qiymat yetarli.
+          BOT_TOKEN: "111111:TEST-TOKEN-NOT-REAL"
+          ADMIN_ID: "1"
+          SUPABASE_URL: "https://example.supabase.co"
+          SUPABASE_KEY: "test-key"
         run: |
           python -c "
 import config
-print('✅ config.py - muvaffaqiyatli import qilindi')
-"
-          python -c "
-import ast
-with open('main.py', 'r') as f:
-    tree = ast.parse(f.read())
-    functions = [node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
-    classes = [node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
-    print(f'✅ main.py - {len(functions)} ta funksiya, {len(classes)} ta klass')
+from handlers import register_routers
+from aiogram import Dispatcher
+from aiogram.fsm.storage.memory import MemoryStorage
+dp = Dispatcher(storage=MemoryStorage())
+register_routers(dp)
+print('✅ config + routerlar muvaffaqiyatli yuklandi:', [r.name for r in dp.sub_routers])
 "
           echo "✅ Barcha importlar muvaffaqiyatli"
 
+  # ⚠️ RENDER DEPLOY O'CHIRILGAN
+  # Bot endi Railway'da (polling rejimida) ishlaydi. Render bir vaqtda
+  # ishga tushsa, bitta token bilan ikkita polling bo'lib Telegram
+  # `409 Conflict` qaytaradi va IKKALA bot ham ishlamay qoladi.
+  #
+  # Render'ni qaytadan yoqmoqchi bo'lsangiz: `if: false` ni olib tashlang
+  # VA avval Railway servisini to'xtating.
   deploy:
-    name: 🚀 Render Deploy
+    name: 🚀 Render Deploy (o'chirilgan)
     needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: false
     runs-on: ubuntu-latest
     
     steps:
