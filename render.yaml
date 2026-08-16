@@ -1,0 +1,47 @@
+# ====================================
+# RENDER DEPLOY KONFIGURATSIYASI
+# ====================================
+# Render dashboard -> New Web Service -> Deploy from Git repo
+# Yoki Blueprint (shu fayl) orqali deploy qiling
+
+services:
+  - type: web
+    name: kinochi-ota-bot
+    runtime: python
+    region: frankfurt  # Yevropa - Telegram uchun tezroq
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    
+    # Environment variables
+    envVars:
+      - key: BOT_TOKEN
+        value: 8951088634:AAGNZf4iK7et8lvPgQu3J3pB3HWTaqMfe7E
+      - key: MODE
+        value: webhook
+      - key: SELF_URL
+        sync: false  # Dashboarddan kiritiladi (Render URL)
+      - key: PRIMARY_URL
+        sync: false  # Asosiy Railway server URL (watchdog uchun, dashboarddan kiritiladi)
+      - key: SECRET_KEY
+        generateValue: true  # Avtomatik random kalit yaratadi
+      - key: DATA_DIR
+        value: /data
+      # PORT ni Render avtomatik beradi (odatda 10000) — qo'lda belgilash
+      # konflikt chiqarib, healthcheck muvaffaqiyatsiz bo'lishiga sabab bo'ladi!
+      # ⚠️ MUHIM: Python versiyasini majburlash
+      # Dashboardda PYTHON_VERSION o'rnatilgan bo'lsa, u blueprint dan ustun turadi!
+      # Dashboarddagi eski PYTHON_VERSION=3.12 ni o'chirib tashlang!
+      - key: PYTHON_VERSION
+        value: "3.12.8"
+      - key: PIP_DEFAULT_TIMEOUT
+        value: "120"
+
+    # Health check
+    healthCheckPath: /health
+
+    # Avtomatik deploy (branchga push qilganda)
+    autoDeploy: true
+
+    # Free tierda 15 minut inaktivlikdan keyin uxlab qoladi
+    # Lekin Telegram webhook yuborganda avtomatik uyg'onadi
