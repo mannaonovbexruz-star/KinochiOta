@@ -15,8 +15,11 @@ services:
     
     # Environment variables
     envVars:
+      # ⚠️ MUHIM: BOT_TOKEN endi bu yerga yozilmaydi (xavfsizlik!)
+      # Token Render dashboard -> Environment bo'limida sozlanadi.
+      # BotFather -> /revoke -> yangi token oling va dashboardga qo'shing.
       - key: BOT_TOKEN
-        value: 8951088634:AAGNZf4iK7et8lvPgQu3J3pB3HWTaqMfe7E
+        sync: false  # Dashboarddan kiritiladi — repo'ga hech qachon yozilmaydi!
       - key: MODE
         value: webhook
       - key: SELF_URL

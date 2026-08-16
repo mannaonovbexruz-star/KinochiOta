@@ -39,23 +39,72 @@ logger = logging.getLogger(__name__)
 LOCK_FILE = os.path.join(DATA_DIR, "bot.lock")
 
 
+def _windows_process_image_name(pid):
+    """Windows: berilgan PID ga tegishli jarayon nomini qaytaradi (yoki None).
+
+    Misol: _windows_process_image_name(1234) -> "python.exe"
+    Jarayon topilmasa yoki nomini aniqlab bo'lmasa -> None
+    """
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+    stdout = result.stdout.strip()
+    if not stdout:
+        return None
+
+    # CSV formati: "image.exe","PID","Session Name","Session#","Mem Usage"
+    # Mos jarayon bo'lmasa tasklist xabar chiqaradi ("INFO: No tasks...")
+    try:
+        first_field = stdout.splitlines()[0].split(",")[0].strip('"')
+    except IndexError:
+        return None
+
+    if not first_field or not first_field.lower().endswith(".exe"):
+        return None
+
+    return first_field
+
+
+def _is_python_process_name(image_name):
+    """Jarayon nomi Python botiga tegishlimi?"""
+    if not image_name:
+        return False
+    base = image_name.lower()
+    return (
+        base.startswith("python")
+        or base in ("py.exe", "pyw.exe")
+    )
+
+
 def _pid_is_alive(pid):
-    """Berilgan PID jonli jarayonga tegishlimi?"""
+    """Berilgan PID jonli Python jarayoniga tegishlimi?
+
+    Windows PID-larni qayta ishlatadi: eski lock fayldagi PID boshqa
+    jarayonga (masalan svchost.exe) o'tib qolishi mumkin. Shuning uchun
+    Windows'da PID jonli bo'lsa ham, u aynan Python jarayoni ekanini
+    tekshiramiz — aks holda o'lik (stale) lock fayl botni bloklab qo'yardi.
+    Linux/Mac'da esa har qanday jonli jarayon yetarli (PID qayta
+    ishlatilish ehtimoli ancha past).
+    """
 
     if pid <= 0:
         return False
 
     try:
         if os.name == "nt":
-            # Windows: tasklist orqali tekshiramiz
-            import subprocess
-            result = subprocess.run(
-                ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
-                capture_output=True,
-                text=True,
-                timeout=10,
+            # Windows: PID + jarayon nomini birgalikda tekshiramiz
+            return _is_python_process_name(
+                _windows_process_image_name(pid)
             )
-            return str(pid) in result.stdout
 
         # Linux/Mac: signal 0 yuborib jarayon mavjudligini tekshiramiz
         os.kill(pid, 0)
@@ -98,8 +147,13 @@ def acquire_single_instance_lock():
                 old_pid = 0
 
             if old_pid > 0 and _pid_is_alive(old_pid):
+                owner = ""
+                if os.name == "nt":
+                    img = _windows_process_image_name(old_pid)
+                    if img:
+                        owner = f", {img}"
                 logger.error(
-                    f"🚫 Bot allaqachon ishlamoqda (PID {old_pid})!\n"
+                    f"🚫 Bot allaqachon ishlamoqda (PID {old_pid}{owner})!\n"
                     f"   Ikkinchi instansiya ishga tushirilmaydi.\n"
                     f"   Avval eski jarayonni to'xtating yoki {LOCK_FILE} faylini o'chiring."
                 )
