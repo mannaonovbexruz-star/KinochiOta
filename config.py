@@ -1,41 +1,89 @@
 import os
 import sys
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Telegram Bot Token (majburiy)
-# Tokenni .env faylida BOT_TOKEN=... sifatida yoki platforma dashboardida saqlang
-TOKEN = os.getenv("BOT_TOKEN")
-if not TOKEN:
-    print("❌ XATOLIK: BOT_TOKEN environment variable topilmadi!", file=sys.stderr)
-    print("💡 .env faylida yoki Railway dashboardda BOT_TOKEN ni sozlang.", file=sys.stderr)
-    sys.exit(1)
 
-# Ma'lumotlar saqlanadigan papka
-# Railwayda persistent volume mount qiling: /data
-# Mahalliy kompyuterda loyiha papkasi ichida
+# =========================
+# TELEGRAM
+# =========================
+
+# @BotFather dan olingan token
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+# Eski main.py bilan moslik uchun alias (o'zgartirmang)
+TOKEN = BOT_TOKEN
+
+# ADMIN_ID bitta raqam ham, vergul bilan ajratilgan ro'yxat ham bo'lishi mumkin:
+#   ADMIN_ID=123456789
+#   ADMIN_ID=123456789,987654321
+ADMIN_IDS: set[int] = {
+    int(part.strip())
+    for part in os.getenv("ADMIN_ID", "").split(",")
+    if part.strip().isdigit()
+}
+
+
+# =========================
+# SUPABASE
+# =========================
+
+# Supabase Dashboard -> Project Settings -> API
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+
+# ⚠️ Serverda service_role kalitidan foydalaning (RLS'ni chetlab o'tadi).
+# anon kaliti bilan ishlatsangiz, jadvalga RLS policy yozishingiz shart.
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+# Jadval nomi (SQL sxemasidagi bilan bir xil bo'lishi kerak)
+MOVIES_TABLE = os.getenv("MOVIES_TABLE", "movies")
+
+
+# =========================
+# SERVER / DEPLOY
+# =========================
+
+# Railway/Render avtomatik PORT beradi
+PORT = int(os.getenv("PORT", "8080"))
+
+# railway.json dagi healthcheckPath ishlashi uchun kichik HTTP server
+ENABLE_HEALTH_SERVER = os.getenv("ENABLE_HEALTH_SERVER", "1") == "1"
+
+# Eski main.py fayl-bazasi uchun papka (Supabase versiyasida ishlatilmaydi)
 DATA_DIR = os.getenv("DATA_DIR", os.path.dirname(os.path.abspath(__file__)))
 
-# Agar sozlangan DATA_DIR yozib bo'lmaydigan bo'lsa (masalan Render free
-# tier'da /data yaratib bo'lmasa), ishonchli joyga tushamiz. Aks holda
-# lock/premium/database yozish xatosi app'ni ishdan chiqarib, healthcheck
-# muvaffaqiyatsiz bo'lib qolardi.
-_probe = None
-try:
-    os.makedirs(DATA_DIR, exist_ok=True)
-    _probe = os.path.join(DATA_DIR, ".write_probe")
-    with open(_probe, "w", encoding="utf-8") as _f:
-        _f.write("ok")
-except OSError:
-    DATA_DIR = os.path.dirname(os.path.abspath(__file__))
-    print(f"⚠️ DATA_DIR yozib bo'lmadi, fallback: {DATA_DIR}", file=sys.stderr)
-finally:
-    if _probe is not None:
-        try:
-            os.remove(_probe)
-        except OSError:
-            pass
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 
-# Health check server porti (Railway/Render avtomatik PORT beradi)
-PORT = int(os.getenv("PORT", 8080))
+
+def is_admin(user_id: int) -> bool:
+    """Foydalanuvchi admin ekanligini tekshiradi."""
+    return user_id in ADMIN_IDS
+
+
+def validate() -> None:
+    """Majburiy env o'zgaruvchilarni tekshiradi.
+
+    Import paytida emas, bot.py startida chaqiriladi — shunda eski main.py
+    ham shu configni Supabase o'zgaruvchilarisiz import qila oladi.
+    """
+    missing = [
+        name
+        for name, value in (
+            ("BOT_TOKEN", BOT_TOKEN),
+            ("SUPABASE_URL", SUPABASE_URL),
+            ("SUPABASE_KEY", SUPABASE_KEY),
+        )
+        if not value
+    ]
+    if not ADMIN_IDS:
+        missing.append("ADMIN_ID")
+
+    if missing:
+        print(
+            f"❌ XATOLIK: quyidagi environment variable'lar yo'q: {', '.join(missing)}",
+            file=sys.stderr,
+        )
+        print("💡 .env faylida yoki Railway dashboardda sozlang.", file=sys.stderr)
+        sys.exit(1)

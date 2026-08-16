@@ -1,0 +1,202 @@
+import logging
+
+from aiogram import F, Router
+from aiogram.filters import Command, StateFilter
+from aiogram.fsm.context import FSMContext
+from aiogram.types import Message
+
+from database import movies as movies_db
+from database.movies import MovieAlreadyExistsError
+from handlers.filters import IsAdmin
+from handlers.states import AddMovie, DeleteMovie
+
+logger = logging.getLogger(__name__)
+
+router = Router(name="admin")
+
+# Butun routerni admin bilan cheklaymiz — oddiy foydalanuvchi bu handlerlarga
+# umuman tushmaydi va xabari keyingi routerga (user) o'tib ketadi.
+router.message.filter(IsAdmin())
+
+MAX_CODE_LENGTH = 32
+MAX_TITLE_LENGTH = 200
+
+
+# =========================
+# UMUMIY BUYRUQLAR
+# =========================
+
+
+@router.message(StateFilter("*"), Command("cancel"))
+async def cmd_cancel(message: Message, state: FSMContext) -> None:
+    """Istalgan FSM jarayonini bekor qiladi."""
+    if await state.get_state() is None:
+        await message.answer("ℹ️ Hozir bekor qiladigan jarayon yo'q.")
+        return
+
+    await state.clear()
+    await message.answer("❌ Bekor qilindi.")
+
+
+@router.message(Command("admin", "help_admin"))
+async def cmd_admin(message: Message) -> None:
+    await message.answer(
+        "🛠 <b>Admin panel</b>\n\n"
+        "🎬 Kino qo'shish: shunchaki videoni shu chatga tashlang\n"
+        "📋 /list — oxirgi qo'shilgan kinolar\n"
+        "📊 /stats — statistika\n"
+        "🗑 /delete — kino o'chirish\n"
+        "❌ /cancel — jarayonni bekor qilish"
+    )
+
+
+@router.message(Command("stats"))
+async def cmd_stats(message: Message) -> None:
+    total = await movies_db.count_movies()
+    await message.answer(f"📊 Bazadagi kinolar soni: <b>{total}</b> ta")
+
+
+@router.message(Command("list"))
+async def cmd_list(message: Message) -> None:
+    items = await movies_db.list_movies(limit=20)
+    if not items:
+        await message.answer("📭 Baza hozircha bo'sh.")
+        return
+
+    lines = [f"<code>{m['movie_code']}</code> — {m['title']}" for m in items]
+    await message.answer("📋 <b>Oxirgi 20 ta kino:</b>\n\n" + "\n".join(lines))
+
+
+# =========================
+# KINO QO'SHISH (FSM)
+# =========================
+
+
+@router.message(StateFilter(None), F.video)
+async def catch_video(message: Message, state: FSMContext) -> None:
+    """Admin video tashladi — file_id ni ushlab olamiz va kod so'raymiz."""
+    file_id = message.video.file_id
+
+    # FSM storage — bu vaqtinchalik "savat": jarayon tugaguncha ma'lumot
+    # shu yerda turadi, tugagach state.clear() bilan tozalanadi.
+    await state.update_data(file_id=file_id)
+    await state.set_state(AddMovie.waiting_for_code)
+
+    await message.answer(
+        "✅ Video qabul qilindi!\n\n"
+        f"<code>file_id</code>: <code>{file_id}</code>\n\n"
+        "🔢 Endi shu kino uchun <b>kod</b> yuboring (masalan: <code>125</code>)\n"
+        "❌ Bekor qilish: /cancel"
+    )
+
+
+@router.message(StateFilter(None), F.document)
+async def catch_video_document(message: Message, state: FSMContext) -> None:
+    """Video "document" sifatida (siqilmagan holda) yuborilgan holat."""
+    mime = message.document.mime_type or ""
+    if not mime.startswith("video/"):
+        await message.answer("⚠️ Faqat video fayl yuboring.")
+        return
+
+    await state.update_data(file_id=message.document.file_id)
+    await state.set_state(AddMovie.waiting_for_code)
+    await message.answer(
+        "✅ Video (document) qabul qilindi!\n\n"
+        "🔢 Kino uchun <b>kod</b> yuboring (masalan: <code>125</code>)\n"
+        "❌ Bekor qilish: /cancel"
+    )
+
+
+@router.message(AddMovie.waiting_for_code, F.text)
+async def process_code(message: Message, state: FSMContext) -> None:
+    code = message.text.strip()
+
+    if len(code) > MAX_CODE_LENGTH:
+        await message.answer(f"⚠️ Kod juda uzun (max {MAX_CODE_LENGTH} belgi). Qayta yuboring.")
+        return
+
+    if not code.replace("_", "").replace("-", "").isalnum():
+        await message.answer(
+            "⚠️ Kodda faqat harf, raqam, <code>-</code> va <code>_</code> bo'lishi mumkin.\n"
+            "Qayta yuboring:"
+        )
+        return
+
+    # Bazaga yozishdan oldin tekshiramiz — admin xatosini darrov ko'rsatamiz
+    existing = await movies_db.get_movie_by_code(code)
+    if existing:
+        await message.answer(
+            f"⚠️ <code>{code}</code> kodi band: <b>{existing['title']}</b>\n"
+            "Boshqa kod yuboring yoki /cancel:"
+        )
+        return
+
+    await state.update_data(movie_code=code)
+    await state.set_state(AddMovie.waiting_for_title)
+    await message.answer("🎬 Endi kino <b>nomini</b> yuboring:")
+
+
+@router.message(AddMovie.waiting_for_code)
+async def process_code_invalid(message: Message) -> None:
+    await message.answer("⚠️ Kodni <b>matn</b> ko'rinishida yuboring (masalan: 125).")
+
+
+@router.message(AddMovie.waiting_for_title, F.text)
+async def process_title(message: Message, state: FSMContext) -> None:
+    title = message.text.strip()
+
+    if len(title) > MAX_TITLE_LENGTH:
+        await message.answer(f"⚠️ Nom juda uzun (max {MAX_TITLE_LENGTH} belgi). Qayta yuboring.")
+        return
+
+    data = await state.get_data()
+    file_id = data["file_id"]
+    movie_code = data["movie_code"]
+
+    try:
+        await movies_db.add_movie(movie_code=movie_code, file_id=file_id, title=title)
+    except MovieAlreadyExistsError:
+        await state.clear()
+        await message.answer(f"⚠️ <code>{movie_code}</code> kodi endigina band bo'ldi. Qaytadan urinib ko'ring.")
+        return
+    except Exception as exc:  # noqa: BLE001 - adminga aniq xabar berish uchun
+        logger.exception("Kino saqlashda xato")
+        await state.clear()
+        await message.answer(f"❌ Bazaga saqlashda xato:\n<code>{exc}</code>")
+        return
+
+    await state.clear()
+    await message.answer(
+        "✅ <b>Kino saqlandi!</b>\n\n"
+        f"🔢 Kod: <code>{movie_code}</code>\n"
+        f"🎬 Nomi: <b>{title}</b>\n\n"
+        f"Tekshirish uchun botga <code>{movie_code}</code> deb yozing."
+    )
+
+
+@router.message(AddMovie.waiting_for_title)
+async def process_title_invalid(message: Message) -> None:
+    await message.answer("⚠️ Kino nomini <b>matn</b> ko'rinishida yuboring.")
+
+
+# =========================
+# KINO O'CHIRISH (FSM)
+# =========================
+
+
+@router.message(Command("delete"))
+async def cmd_delete(message: Message, state: FSMContext) -> None:
+    await state.set_state(DeleteMovie.waiting_for_code)
+    await message.answer("🗑 O'chiriladigan kino <b>kodini</b> yuboring:\n❌ Bekor qilish: /cancel")
+
+
+@router.message(DeleteMovie.waiting_for_code, F.text)
+async def process_delete_code(message: Message, state: FSMContext) -> None:
+    code = message.text.strip()
+    deleted = await movies_db.delete_movie(code)
+    await state.clear()
+
+    if deleted:
+        await message.answer(f"🗑 <code>{code}</code> kodli kino o'chirildi.")
+    else:
+        await message.answer(f"🔍 <code>{code}</code> kodli kino topilmadi.")
