@@ -5,6 +5,7 @@ from aiogram.filters import Command, CommandStart, StateFilter
 from aiogram.types import Message
 from aiogram.utils.markdown import hbold
 
+import config
 from database import movies as movies_db
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,24 @@ async def cmd_help(message: Message) -> None:
         "ℹ️ <b>Yordam</b>\n\n"
         "Kino olish uchun shunchaki kino <b>kodini</b> yozing (masalan: <code>125</code>).\n"
         "Kodlarni kanalimizdagi postlardan olasiz."
+    )
+
+
+@router.message(Command("id"))
+async def cmd_id(message: Message) -> None:
+    """Diagnostika: bot xabarda KIMNI ko'rayotganini aynan ko'rsatadi.
+
+    IsAdmin filtri `from_user.id` ni tekshiradi — shu buyruq o'sha raqamni
+    qaytaradi. ADMIN_ID bilan solishtirish uchun ishlatiladi.
+    """
+    me = await message.bot.get_me()
+    user_id = message.from_user.id
+    await message.answer(
+        f"🤖 Bot: @{me.username}\n"
+        f"👤 Sizning user_id: <code>{user_id}</code>\n"
+        f"💬 chat_id: <code>{message.chat.id}</code>\n"
+        f"🔑 ADMIN_ID ro'yxati: <code>{sorted(config.ADMIN_IDS)}</code>\n"
+        f"{'✅ Siz ADMINSIZ' if config.is_admin(user_id) else '❌ Siz admin EMASSIZ'}"
     )
 
 
