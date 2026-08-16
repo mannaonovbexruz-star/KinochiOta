@@ -175,6 +175,19 @@ async def main() -> None:
     finally:
         config.ADMIN_PASSWORD = saved
 
+    print("\n[13] Parolda ASCII bo'lmagan harf bo'lsa ham ishlaydi:")
+    auth_handlers.reset_login_attempts()
+    FAKE_ADMINS.clear()
+    saved = config.ADMIN_PASSWORD
+    config.ADMIN_PASSWORD = "Behruz’2026ў"  # tipografik apostrof + kirill
+    try:
+        reply = await send(STRANGER_ID, "/admin Behruz’2026ў")
+        check("admin bo'ldi", STRANGER_ID in FAKE_ADMINS, f"admins={list(FAKE_ADMINS)}")
+        check("panel ochildi", "Admin panel" in reply, reply[:60])
+    finally:
+        config.ADMIN_PASSWORD = saved
+        FAKE_ADMINS.clear()
+
     report()
 
 

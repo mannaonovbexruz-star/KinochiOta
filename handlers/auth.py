@@ -91,7 +91,10 @@ async def cmd_admin(message: Message, command: CommandObject) -> None:
     # 5. Parolni tekshirish.
     # compare_digest — vaqt bo'yicha hujumdan himoya: taqqoslash har doim
     # bir xil vaqt oladi, shuning uchun parolni belgima-belgi topib bo'lmaydi.
-    if secrets.compare_digest(password, config.ADMIN_PASSWORD):
+    #
+    # ⚠️ .encode() SHART: compare_digest str bilan faqat ASCII qabul qiladi.
+    # Parolda ’ yoki ў bo'lsa TypeError chiqib, bot javob bermay qolardi.
+    if secrets.compare_digest(password.encode("utf-8"), config.ADMIN_PASSWORD.encode("utf-8")):
         await admins_db.add_admin(user.id, user.username)
         logger.info("Yangi admin: %s (@%s)", user.id, user.username)
 
