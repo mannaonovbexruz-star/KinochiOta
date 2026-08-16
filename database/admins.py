@@ -15,7 +15,7 @@ import time
 from typing import Any
 
 import config
-from database.client import get_client
+from database.client import get_client, with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ def _table():
 def ping() -> bool:
     """Jadval mavjudligini tekshiradi (startupda ogohlantirish uchun)."""
     try:
-        _table().select("user_id").limit(1).execute()
+        with_retry(lambda: _table().select("user_id").limit(1).execute())
         return True
     except Exception as exc:  # noqa: BLE001
         logger.error("`%s` jadvaliga ulanib bo'lmadi: %s", TABLE, exc)
@@ -71,7 +71,7 @@ async def get_admin_ids(force: bool = False) -> set[int]:
         return _cached_ids
 
     try:
-        _cached_ids = await asyncio.to_thread(_fetch_admin_ids_sync)
+        _cached_ids = await asyncio.to_thread(with_retry, _fetch_admin_ids_sync)
         _cached_at = time.monotonic()
         _cache_loaded = True
     except Exception as exc:  # noqa: BLE001 - baza tushsa bot ishlashda davom etsin
@@ -87,7 +87,7 @@ def _list_admins_sync() -> list[Admin]:
 
 async def list_admins() -> list[Admin]:
     """To'liq ro'yxat (username, qo'shilgan sana bilan) — panel uchun."""
-    return await asyncio.to_thread(_list_admins_sync)
+    return await asyncio.to_thread(with_retry, _list_admins_sync)
 
 
 async def is_admin(user_id: int) -> bool:
@@ -111,7 +111,7 @@ def _add_admin_sync(user_id: int, username: str | None) -> Admin:
 
 async def add_admin(user_id: int, username: str | None = None) -> Admin:
     """Adminlar ro'yxatiga qo'shadi va keshni darrov yangilaydi."""
-    result = await asyncio.to_thread(_add_admin_sync, user_id, username)
+    result = await asyncio.to_thread(with_retry, _add_admin_sync, user_id, username)
     invalidate_cache()
     return result
 
@@ -123,6 +123,6 @@ def _remove_admin_sync(user_id: int) -> bool:
 
 async def remove_admin(user_id: int) -> bool:
     """Adminlikdan chiqaradi. Egasiga ta'sir qilmaydi (u bazada yo'q)."""
-    result = await asyncio.to_thread(_remove_admin_sync, user_id)
+    result = await asyncio.to_thread(with_retry, _remove_admin_sync, user_id)
     invalidate_cache()
     return result

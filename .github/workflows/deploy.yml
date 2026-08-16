@@ -75,6 +75,7 @@ print('✅ config + routerlar muvaffaqiyatli yuklandi:', [r.name for r in dp.sub
           python tests/test_admin_access.py
           python tests/test_admin_dashboard.py
           python tests/test_reply_keyboard.py
+          python tests/test_retry.py
 
   # ⚠️ RENDER DEPLOY O'CHIRILGAN
   # Bot endi Railway'da (polling rejimida) ishlaydi. Render bir vaqtda

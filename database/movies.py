@@ -12,7 +12,7 @@ import logging
 from typing import Any
 
 import config
-from database.client import get_client
+from database.client import get_client, with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ def _get_movie_by_code_sync(movie_code: str) -> Movie | None:
 
 async def get_movie_by_code(movie_code: str) -> Movie | None:
     """Kod bo'yicha kinoni qaytaradi, topilmasa None."""
-    return await asyncio.to_thread(_get_movie_by_code_sync, movie_code.strip())
+    return await asyncio.to_thread(with_retry, _get_movie_by_code_sync, movie_code.strip())
 
 
 def _list_movies_sync(limit: int, offset: int) -> list[Movie]:
@@ -62,7 +62,7 @@ def _list_movies_sync(limit: int, offset: int) -> list[Movie]:
 
 async def list_movies(limit: int = 20, offset: int = 0) -> list[Movie]:
     """Oxirgi qo'shilgan kinolar ro'yxati (admin panel uchun)."""
-    return await asyncio.to_thread(_list_movies_sync, limit, offset)
+    return await asyncio.to_thread(with_retry, _list_movies_sync, limit, offset)
 
 
 def _count_movies_sync() -> int:
@@ -73,7 +73,7 @@ def _count_movies_sync() -> int:
 
 async def count_movies() -> int:
     """Bazadagi kinolar umumiy soni."""
-    return await asyncio.to_thread(_count_movies_sync)
+    return await asyncio.to_thread(with_retry, _count_movies_sync)
 
 
 # =========================
@@ -112,4 +112,4 @@ def _delete_movie_sync(movie_code: str) -> bool:
 
 async def delete_movie(movie_code: str) -> bool:
     """Kinoni o'chiradi. O'chirilgan bo'lsa True, topilmasa False."""
-    return await asyncio.to_thread(_delete_movie_sync, movie_code.strip())
+    return await asyncio.to_thread(with_retry, _delete_movie_sync, movie_code.strip())
