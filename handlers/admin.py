@@ -8,6 +8,7 @@ from aiogram.types import Message
 from database import movies as movies_db
 from database.movies import MovieAlreadyExistsError
 from handlers.filters import IsAdmin
+from handlers.keyboards import BTN_ADD, BTN_DELETE, BTN_LIST, BTN_STATS
 from handlers.states import AddMovie, DeleteMovie
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,47 @@ async def cmd_cancel(message: Message, state: FSMContext) -> None:
     await message.answer("❌ Bekor qilindi.")
 
 
+# =========================
+# DOIMIY KLAVIATURA TUGMALARI
+# =========================
+# MUHIM: bu handlerlar FSM handlerlaridan OLDIN turishi kerak. aiogram
+# handlerlarni ro'yxatga olish tartibida tekshiradi — pastda tursa, kino
+# qo'shish jarayonida bosilgan tugma "kino kodi" deb qabul qilinardi.
+#
+# StateFilter("*") + state.clear(): tugma qaysi bosqichda bosilsa ham
+# joriy jarayonni bekor qilib, o'z amalini bajaradi.
+
+
+@router.message(StateFilter("*"), F.text == BTN_ADD)
+async def btn_add(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await message.answer(
+        "🎬 <b>Kino qo'shish</b>\n\nVideoni shu chatga yuboring — "
+        "keyin kod va nom so'rayman."
+    )
+
+
+@router.message(StateFilter("*"), F.text == BTN_STATS)
+async def btn_stats(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    total = await movies_db.count_movies()
+    await message.answer(f"📊 Bazadagi kinolar soni: <b>{total}</b> ta")
+
+
+@router.message(StateFilter("*"), F.text == BTN_LIST)
+async def btn_list(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await _send_movie_list(message)
+
+
+@router.message(StateFilter("*"), F.text == BTN_DELETE)
+async def btn_delete(message: Message, state: FSMContext) -> None:
+    await state.set_state(DeleteMovie.waiting_for_code)
+    await message.answer(
+        "🗑 O'chiriladigan kino <b>kodini</b> yuboring:\n❌ Bekor qilish: /cancel"
+    )
+
+
 # ℹ️ `/admin` bu yerda EMAS — u handlers/auth.py da, chunki hali admin
 # bo'lmagan odam ham parol bilan kira olishi kerak.
 
@@ -61,8 +103,8 @@ async def cmd_stats(message: Message) -> None:
     await message.answer(f"📊 Bazadagi kinolar soni: <b>{total}</b> ta")
 
 
-@router.message(Command("list"))
-async def cmd_list(message: Message) -> None:
+async def _send_movie_list(message: Message) -> None:
+    """`/list` va 📋 tugmasi uchun umumiy."""
     items = await movies_db.list_movies(limit=20)
     if not items:
         await message.answer("📭 Baza hozircha bo'sh.")
@@ -70,6 +112,11 @@ async def cmd_list(message: Message) -> None:
 
     lines = [f"<code>{m['movie_code']}</code> — {m['title']}" for m in items]
     await message.answer("📋 <b>Oxirgi 20 ta kino:</b>\n\n" + "\n".join(lines))
+
+
+@router.message(Command("list"))
+async def cmd_list(message: Message) -> None:
+    await _send_movie_list(message)
 
 
 # =========================

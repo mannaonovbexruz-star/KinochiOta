@@ -8,6 +8,7 @@ from aiogram.utils.markdown import hbold
 import config
 from database import admins as admins_db
 from database import movies as movies_db
+from handlers.keyboards import admin_reply_keyboard, remove_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -16,12 +17,22 @@ router = Router(name="user")
 
 @router.message(CommandStart())
 async def cmd_start(message: Message) -> None:
-    await message.answer(
+    text = (
         f"👋 Assalomu alaykum, {hbold(message.from_user.full_name)}!\n\n"
         "🎬 Men kino botman.\n"
         "🔢 Kino <b>kodini</b> yuboring — men uni sizga jo'nataman.\n\n"
         "Masalan: <code>125</code>"
     )
+
+    # Adminda doimiy tugmalar chiqadi. Adminlikdan chiqarilgan odamda esa
+    # eski tugmalar qolib ketmasligi uchun ularni olib tashlaymiz.
+    if await admins_db.is_admin(message.from_user.id):
+        await message.answer(
+            text + "\n\n🛠 Pastdagi tugmalar orqali boshqaring.",
+            reply_markup=admin_reply_keyboard(),
+        )
+    else:
+        await message.answer(text, reply_markup=remove_keyboard())
 
 
 @router.message(Command("help"))

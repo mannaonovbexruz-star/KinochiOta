@@ -91,8 +91,8 @@ async def main() -> None:
     m = mark()
     await send(STRANGER_ID, "125")
     from harness import SENT  # noqa: E402
-    check("video yuborildi", any(name == "SendVideo" for name, _, _ in SENT[m:]),
-          str([n for n, _, _ in SENT[m:]]))
+    check("video yuborildi", any(row[0] == "SendVideo" for row in SENT[m:]),
+          str([row[0] for row in SENT[m:]]))
 
     reply = await send(STRANGER_ID, "888")
     check("topilmagan kod", "topilmadi" in reply, reply[:60])

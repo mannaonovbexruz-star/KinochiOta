@@ -14,6 +14,7 @@ from aiogram.types import Message
 
 import config
 from database import admins as admins_db
+from handlers.keyboards import admin_reply_keyboard
 from handlers.panel import render_panel
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,10 @@ def _register_failure(user_id: int) -> None:
 
 
 async def _show_panel(message: Message) -> None:
+    # Avval doimiy tugmalarni biriktiramiz (reply klaviatura), keyin panelni
+    # inline tugmalari bilan chiqaramiz — ikkalasi bir vaqtda ishlayveradi.
+    await message.answer("🛠 Boshqaruv tugmalari yoqildi.", reply_markup=admin_reply_keyboard())
+
     text, markup = await render_panel(message.from_user.id)
     await message.answer(text, reply_markup=markup)
 

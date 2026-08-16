@@ -31,14 +31,21 @@ from aiogram.types import (  # noqa: E402
 
 TEST_TOKEN = "111111:TEST-TOKEN-NOT-REAL"
 
-# Yuborilgan har bir API chaqiruvi: (metod nomi, matn, tugmalar ro'yxati)
-SENT: list[tuple[str, str, list[str]]] = []
+# Yuborilgan har bir API chaqiruvi:
+# (metod nomi, matn, tugmalar ro'yxati, klaviatura turi)
+SENT: list[tuple[str, str, list[str], str]] = []
 
 
 def _buttons(method) -> list[str]:
+    """Inline ham, reply klaviatura ham bir xil o'qiladi."""
     markup = getattr(method, "reply_markup", None)
-    rows = getattr(markup, "inline_keyboard", None) or []
-    return [btn.text for row in rows for btn in row]
+    rows = getattr(markup, "inline_keyboard", None) or getattr(markup, "keyboard", None) or []
+    return [getattr(btn, "text", str(btn)) for row in rows for btn in row]
+
+
+def _markup_type(method) -> str:
+    markup = getattr(method, "reply_markup", None)
+    return type(markup).__name__ if markup is not None else ""
 
 
 class FakeSession(BaseSession):
@@ -50,7 +57,7 @@ class FakeSession(BaseSession):
     async def make_request(self, bot, method, timeout=None):
         name = type(method).__name__
         text = getattr(method, "text", None) or getattr(method, "caption", "") or ""
-        SENT.append((name, text, _buttons(method)))
+        SENT.append((name, text, _buttons(method), _markup_type(method)))
 
         if name in ("SendMessage", "EditMessageText"):
             return Message(
@@ -115,8 +122,14 @@ def callback_update(user_id: int, data: str) -> Update:
     )
 
 
-def last(index: int = -1) -> tuple[str, str, list[str]]:
-    return SENT[index] if SENT else ("", "", [])
+def last(index: int = -1) -> tuple[str, str, list[str], str]:
+    return SENT[index] if SENT else ("", "", [], "")
+
+
+def last_markup(index: int = -1) -> str:
+    """Oxirgi xabardagi klaviatura turi: ReplyKeyboardMarkup / InlineKeyboardMarkup /
+    ReplyKeyboardRemove / '' (klaviatura yo'q)."""
+    return last(index)[3]
 
 
 def last_text(index: int = -1) -> str:
@@ -128,7 +141,7 @@ def last_buttons(index: int = -1) -> list[str]:
 
 
 def methods_since(marker: int) -> list[str]:
-    return [m for m, _, _ in SENT[marker:]]
+    return [row[0] for row in SENT[marker:]]
 
 
 def mark() -> int:

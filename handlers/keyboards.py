@@ -5,8 +5,43 @@ Telegram callback_data uchun 64 baytlik chegara bor — shuning uchun
 qisqa prefikslar ishlatilgan.
 """
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+# =========================
+# DOIMIY (REPLY) KLAVIATURA
+# =========================
+# Yozish maydoni ostida turadigan tugmalar. Inline tugmalardan farqi:
+# bosilganda callback emas, TUGMA MATNI oddiy xabar sifatida yuboriladi.
+# Shuning uchun har bir matnga alohida handler kerak (handlers/admin.py).
+
+BTN_ADD = "🎬 Kino qo'shish"
+BTN_DELETE = "🗑 Kino o'chirish"
+BTN_LIST = "📋 Ro'yxat"
+BTN_STATS = "📊 Statistika"
+
+
+def admin_reply_keyboard() -> ReplyKeyboardMarkup:
+    """Adminning doimiy klaviaturasi."""
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=BTN_ADD), KeyboardButton(text=BTN_DELETE)],
+            [KeyboardButton(text=BTN_LIST), KeyboardButton(text=BTN_STATS)],
+        ],
+        resize_keyboard=True,   # tugmalar balandligi ixcham bo'ladi
+        is_persistent=True,     # foydalanuvchi yopsa ham qaytadi
+    )
+
+
+def remove_keyboard() -> ReplyKeyboardRemove:
+    """Adminlikdan chiqarilgan odamda eski tugmalar qolib ketmasin."""
+    return ReplyKeyboardRemove()
 
 CB_ADD = "adm:add"
 CB_LIST = "adm:list"
