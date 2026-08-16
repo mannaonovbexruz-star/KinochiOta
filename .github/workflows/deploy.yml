@@ -70,6 +70,11 @@ print('✅ config + routerlar muvaffaqiyatli yuklandi:', [r.name for r in dp.sub
 "
           echo "✅ Barcha importlar muvaffaqiyatli"
 
+      - name: 🔐 Admin xavfsizlik testlari
+        run: |
+          python tests/test_admin_access.py
+          python tests/test_admin_dashboard.py
+
   # ⚠️ RENDER DEPLOY O'CHIRILGAN
   # Bot endi Railway'da (polling rejimida) ishlaydi. Render bir vaqtda
   # ishga tushsa, bitta token bilan ikkita polling bo'lib Telegram

@@ -2,10 +2,11 @@ import logging
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart, StateFilter
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 from aiogram.utils.markdown import hbold
 
 import config
+from database import admins as admins_db
 from database import movies as movies_db
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,7 @@ async def cmd_id(message: Message) -> None:
     """
     me = await message.bot.get_me()
     user_id = message.from_user.id
-    admin = config.is_admin(user_id)
+    admin = await admins_db.is_admin(user_id)
 
     lines = [
         f"🤖 Bot: @{me.username}",
@@ -51,7 +52,8 @@ async def cmd_id(message: Message) -> None:
     # ADMIN_ID ro'yxatini faqat adminning o'ziga ko'rsatamiz — begona odamga
     # admin ID'sini berish uni nishonga olishni osonlashtiradi (spam, fishing).
     if admin:
-        lines.append(f"🔑 ADMIN_ID ro'yxati: <code>{sorted(config.ADMIN_IDS)}</code>")
+        if config.is_owner(user_id):
+            lines.append(f"👑 Egasi. ADMIN_ID ro'yxati: <code>{sorted(config.OWNER_IDS)}</code>")
         lines.append("✅ Siz ADMINSIZ")
     else:
         lines.append("👥 Siz oddiy foydalanuvchisiz")
@@ -96,3 +98,11 @@ async def search_movie(message: Message) -> None:
 async def fallback(message: Message) -> None:
     """Matn ham, buyruq ham bo'lmagan xabarlar (stiker, rasm va h.k.)."""
     await message.answer("🔢 Iltimos, kino <b>kodini</b> matn ko'rinishida yuboring.")
+
+
+@router.callback_query()
+async def unknown_callback(callback: CallbackQuery) -> None:
+    """Admin paneli tugmalari bu yergacha yetib kelsa — demak bosgan odam
+    admin emas (callbacks routeri IsAdmin bilan himoyalangan). Javob
+    bermasak, tugmada indikator aylanaveradi."""
+    await callback.answer("❌ Bu tugma siz uchun emas.", show_alert=True)

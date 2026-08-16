@@ -1,3 +1,4 @@
+from database import admins
 from database.client import get_client
 from database.movies import (
     MovieAlreadyExistsError,
@@ -9,6 +10,7 @@ from database.movies import (
 )
 
 __all__ = [
+    "admins",
     "get_client",
     "add_movie",
     "get_movie_by_code",

@@ -16,14 +16,24 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 # Eski main.py bilan moslik uchun alias (o'zgartirmang)
 TOKEN = BOT_TOKEN
 
-# ADMIN_ID bitta raqam ham, vergul bilan ajratilgan ro'yxat ham bo'lishi mumkin:
+# EGASI (owner). Bitta raqam ham, vergul bilan ajratilgan ro'yxat ham bo'ladi:
 #   ADMIN_ID=123456789
 #   ADMIN_ID=123456789,987654321
-ADMIN_IDS: set[int] = {
+#
+# Egani bazadan o'chirib bo'lmaydi — u faqat shu env o'zgaruvchida turadi.
+# Parol bilan kirgan oddiy adminlar esa `admins` jadvalida saqlanadi.
+OWNER_IDS: set[int] = {
     int(part.strip())
     for part in os.getenv("ADMIN_ID", "").split(",")
     if part.strip().isdigit()
 }
+
+# Eski nom bilan moslik
+ADMIN_IDS = OWNER_IDS
+
+# Parol bilan admin bo'lish uchun. Bo'sh bo'lsa — parol bilan kirish O'CHIQ,
+# faqat ADMIN_ID dagi egasi admin bo'ladi.
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "").strip()
 
 
 # =========================
@@ -57,9 +67,13 @@ DATA_DIR = os.getenv("DATA_DIR", os.path.dirname(os.path.abspath(__file__)))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 
 
-def is_admin(user_id: int) -> bool:
-    """Foydalanuvchi admin ekanligini tekshiradi."""
-    return user_id in ADMIN_IDS
+def is_owner(user_id: int) -> bool:
+    """Foydalanuvchi EGASI ekanligini tekshiradi (ADMIN_ID env).
+
+    Oddiy adminlik `admins` jadvalidan tekshiriladi — buning uchun
+    `handlers.filters.IsAdmin` yoki `database.admins.get_admin_ids()`.
+    """
+    return user_id in OWNER_IDS
 
 
 def validate() -> None:
@@ -77,7 +91,7 @@ def validate() -> None:
         )
         if not value
     ]
-    if not ADMIN_IDS:
+    if not OWNER_IDS:
         missing.append("ADMIN_ID")
 
     if missing:

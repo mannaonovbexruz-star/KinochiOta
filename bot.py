@@ -16,6 +16,7 @@ from aiogram.types import BotCommand
 from aiohttp import web
 
 import config
+from database.admins import ping as admins_ping
 from database.client import ping as db_ping
 from handlers import register_routers
 
@@ -32,6 +33,7 @@ async def set_commands(bot: Bot) -> None:
         [
             BotCommand(command="start", description="🎬 Botni ishga tushirish"),
             BotCommand(command="help", description="ℹ️ Yordam"),
+            BotCommand(command="id", description="🆔 ID va admin holatim"),
         ]
     )
 
@@ -62,6 +64,19 @@ async def main() -> None:
     if not await asyncio.to_thread(db_ping):
         logger.error("Supabase'ga ulanib bo'lmadi. SUPABASE_URL/SUPABASE_KEY va jadvalni tekshiring.")
         sys.exit(1)
+
+    # `admins` jadvali bo'lmasa bot ishlayveradi (egasi env'dan olinadi),
+    # lekin parol bilan kirish ishlamaydi — buni logda aniq aytamiz
+    if not await asyncio.to_thread(admins_ping):
+        logger.warning(
+            "⚠️ `admins` jadvali topilmadi — Supabase SQL Editor'da "
+            "sql/002_admins.sql ni ishga tushiring. "
+            "Hozircha faqat ADMIN_ID dagi egasi admin bo'la oladi."
+        )
+    elif not config.ADMIN_PASSWORD:
+        logger.warning(
+            "⚠️ ADMIN_PASSWORD sozlanmagan — parol bilan admin bo'lish o'chiq."
+        )
 
     bot = Bot(
         token=config.BOT_TOKEN,

@@ -38,11 +38,16 @@ async def cmd_cancel(message: Message, state: FSMContext) -> None:
     await message.answer("❌ Bekor qilindi.")
 
 
-@router.message(Command("admin", "help_admin"))
-async def cmd_admin(message: Message) -> None:
+# ℹ️ `/admin` bu yerda EMAS — u handlers/auth.py da, chunki hali admin
+# bo'lmagan odam ham parol bilan kira olishi kerak.
+
+
+@router.message(Command("help_admin"))
+async def cmd_help_admin(message: Message) -> None:
     await message.answer(
-        "🛠 <b>Admin panel</b>\n\n"
-        "🎬 Kino qo'shish: shunchaki videoni shu chatga tashlang\n"
+        "🛠 <b>Admin buyruqlari</b>\n\n"
+        "/admin — panelni ochish\n"
+        "🎬 Kino qo'shish: videoni shu chatga tashlang\n"
         "📋 /list — oxirgi qo'shilgan kinolar\n"
         "📊 /stats — statistika\n"
         "🗑 /delete — kino o'chirish\n"
