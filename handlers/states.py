@@ -22,3 +22,9 @@ class AddChannel(StatesGroup):
     """Majburiy obuna kanalini qo'shish (faqat egasi)."""
 
     waiting_for_channel = State()
+
+
+class AddAdmin(StatesGroup):
+    """Paneldan user_id orqali admin qo'shish (faqat egasi)."""
+
+    waiting_for_id = State()

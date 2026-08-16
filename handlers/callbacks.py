@@ -20,6 +20,7 @@ from database import movies as movies_db
 from handlers.filters import IsAdmin
 from handlers.keyboards import (
     CB_ADD,
+    CB_ADMIN_ADD,
     CB_ADMINS,
     CB_BACK,
     CB_CHANNEL_ADD,
@@ -35,7 +36,7 @@ from handlers.keyboards import (
     channels_menu,
 )
 from handlers.panel import render_panel
-from handlers.states import AddChannel, DeleteMovie
+from handlers.states import AddAdmin, AddChannel, DeleteMovie
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +134,25 @@ async def cb_admins(callback: CallbackQuery) -> None:
         body = f"👥 <b>Adminlar ({len(items)} ta):</b>\n\n{rows}"
 
     await _edit(callback, body, admins_menu(items))
+
+
+@router.callback_query(F.data == CB_ADMIN_ADD)
+async def cb_admin_add(callback: CallbackQuery, state: FSMContext) -> None:
+    if not config.is_owner(callback.from_user.id):
+        await callback.answer("❌ Bu amal faqat egasi uchun.", show_alert=True)
+        return
+
+    await callback.answer()
+    await state.set_state(AddAdmin.waiting_for_id)
+    await _edit(
+        callback,
+        "➕ <b>Admin qo'shish</b>\n\n"
+        "Yangi adminning <b>user_id</b> raqamini yuboring.\n\n"
+        "U odam botga <code>/id</code> yozsa, raqamini ko'radi.\n"
+        "Masalan: <code>8363001073</code>\n\n"
+        "❌ Bekor qilish: /cancel",
+        back_menu(),
+    )
 
 
 # =========================

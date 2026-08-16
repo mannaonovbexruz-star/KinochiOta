@@ -51,6 +51,7 @@ CB_ADMINS = "adm:admins"
 CB_CHANNELS = "adm:channels"
 CB_BACK = "adm:back"
 CB_REMOVE_PREFIX = "adm:rm:"
+CB_ADMIN_ADD = "adm:addadmin"
 
 # Kanal boshqaruvi
 CB_CHANNEL_ADD = "ch:add"
@@ -109,8 +110,9 @@ def back_menu() -> InlineKeyboardMarkup:
 
 
 def admins_menu(admins: list[dict]) -> InlineKeyboardMarkup:
-    """Har bir admin uchun o'chirish tugmasi + orqaga."""
+    """➕ qo'shish + har bir admin uchun o'chirish tugmasi + orqaga."""
     builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="➕ Admin qo'shish", callback_data=CB_ADMIN_ADD))
     for item in admins:
         user_id = item["user_id"]
         label = item.get("username") or user_id

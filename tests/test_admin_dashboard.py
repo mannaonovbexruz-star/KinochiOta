@@ -175,6 +175,28 @@ async def main() -> None:
     finally:
         config.ADMIN_PASSWORD = saved
 
+    print("\n[14] Egasi paneldan ID orqali admin qo'sha oladi:")
+    FAKE_ADMINS.clear()
+    await press(OWNER_ID, "adm:admins")
+    check("➕ tugmasi bor", any("Admin qo'shish" in b for b in last_buttons()), str(last_buttons()))
+
+    reply = await press(OWNER_ID, "adm:addadmin")
+    check("ID so'radi", "id" in reply.lower(), reply[:60])
+
+    reply = await send(OWNER_ID, "8363001073")
+    check("admin qo'shildi", 8363001073 in FAKE_ADMINS, f"admins={list(FAKE_ADMINS)}")
+
+    print("\n[15] Noto'g'ri ID qabul qilinmaydi:")
+    await press(OWNER_ID, "adm:addadmin")
+    reply = await send(OWNER_ID, "-1004423253818")  # kanal ID'si
+    check("kanal ID rad etildi", -1004423253818 not in FAKE_ADMINS, f"admins={list(FAKE_ADMINS)}")
+    check("ogohlantirish", "kanal" in reply.lower() or "raqam" in reply.lower(), reply[:60])
+
+    print("\n[16] Oddiy admin ➕ tugmasini bosa olmaydi:")
+    await fake_add_admin(NEWCOMER_ID, "oddiy")
+    reply = await press(NEWCOMER_ID, "adm:addadmin")
+    check("rad etildi", "egasi" in reply.lower(), reply[:60])
+
     print("\n[13] Parolda ASCII bo'lmagan harf bo'lsa ham ishlaydi:")
     auth_handlers.reset_login_attempts()
     FAKE_ADMINS.clear()

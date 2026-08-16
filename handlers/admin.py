@@ -6,12 +6,13 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 import config
+from database import admins as admins_db
 from database import channels as channels_db
 from database import movies as movies_db
 from database.movies import MovieAlreadyExistsError
 from handlers.filters import IsAdmin
 from handlers.keyboards import BTN_ADD, BTN_DELETE, BTN_LIST, BTN_STATS
-from handlers.states import AddChannel, AddMovie, DeleteMovie
+from handlers.states import AddAdmin, AddChannel, AddMovie, DeleteMovie
 
 logger = logging.getLogger(__name__)
 
@@ -231,6 +232,49 @@ async def process_title(message: Message, state: FSMContext) -> None:
 @router.message(AddMovie.waiting_for_title)
 async def process_title_invalid(message: Message) -> None:
     await message.answer("⚠️ Kino nomini <b>matn</b> ko'rinishida yuboring.")
+
+
+# =========================
+# ADMIN QO'SHISH (FSM, faqat egasi)
+# =========================
+
+
+@router.message(AddAdmin.waiting_for_id, F.text)
+async def process_new_admin_id(message: Message, state: FSMContext) -> None:
+    if not config.is_owner(message.from_user.id):
+        await state.clear()
+        await message.answer("❌ Bu amal faqat egasi uchun.")
+        return
+
+    raw = message.text.strip()
+
+    # Minusli raqam = kanal/guruh ID'si. Uni admin qilib bo'lmaydi va
+    # eski botdagi aynan shu chalkashlik ADMIN_ID ga kanal ID sini
+    # yozib qo'yishga olib kelgan edi.
+    if raw.startswith("-"):
+        await message.answer(
+            "⚠️ Bu <b>kanal/guruh</b> ID'si (minus bilan boshlanadi), odam ID'si emas.\n"
+            "U odam botga <code>/id</code> yozsin va chiqqan <b>user_id</b> ni yuboring."
+        )
+        return
+
+    if not raw.isdigit():
+        await message.answer("⚠️ Faqat raqam yuboring. Masalan: <code>8363001073</code>")
+        return
+
+    user_id = int(raw)
+    if config.is_owner(user_id):
+        await state.clear()
+        await message.answer("ℹ️ Bu odam allaqachon <b>egasi</b> — qo'shish shart emas.")
+        return
+
+    await admins_db.add_admin(user_id)
+    await state.clear()
+    await message.answer(
+        f"✅ Admin qo'shildi: <code>{user_id}</code>\n\n"
+        "U odam botga <code>/start</code> yozsa, tugmalar chiqadi.\n"
+        "Panel: /admin"
+    )
 
 
 # =========================
